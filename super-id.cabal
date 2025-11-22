@@ -1,0 +1,42 @@
+cabal-version:       2.4
+name:                super-id
+version:             0.1.0.0
+synopsis:            A simple Haskell project
+license:             BSD-3-Clause
+author:              Author name
+maintainer:          author@example.com
+build-type:          Simple
+
+executable super-id
+  main-is:             Main.hs
+  other-modules:       Repository
+                     , DhallTypes
+                     , ImageGen
+                     , AudioGen
+                     , Logic
+  hs-source-dirs:      app, src
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings
+  build-depends:       base >=4.14 && <5
+                     , scotty
+                     , dhall
+                     , postgresql-simple
+                     , JuicyPixels
+                     , uuid
+                     , base64-bytestring
+                     , bytestring
+                     , text
+                     , http-types
+                     , wai
+                     , aeson
+                     , mtl
+                     , transformers
+                     , containers
+                     , vector
+                     , process
+                     , directory
+                     , filepath
+                     , time
+                     , random
+                     , unordered-containers
+                     , temporary
