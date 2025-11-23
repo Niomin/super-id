@@ -1,11 +1,23 @@
 # Super-ID - The Ultimate Identity Service
 
+A distributed identity management system with custom HTTP methods, Dhall-based configuration, and comprehensive RFC2324 compliance.
+
+**Features:**
+- Custom HTTP methods: `ACQUIRE`, `VALIDATE`, `ABDICATE`, `HELP`
+- Dhall-powered API with strong type safety
+- Multiple response formats: PNG, JPEG, GIF, WAV
+- RFC2324/HTCPCP compliant (Hyper Text Coffee Pot Control Protocol)
+- Production-ready Docker setup with minimal image size
+- PostgreSQL backend with optimized indexing
+
 ## Prerequisites
 
 - Docker and Docker Compose
 - For local development without Docker: Haskell (GHC 9.12.2), Cabal, PostgreSQL
 
 ## Running with Docker Compose
+
+### Development
 
 The easiest way to run the application:
 
@@ -18,9 +30,51 @@ This will:
 2. Build and start the Haskell application on port 3000
 3. Initialize the database schema automatically
 
+### Production
+
+For optimized production builds with minimal image size:
+
+```bash
+docker-compose -f docker-compose.prod.yml up --build -d
+```
+
+Production features:
+- **Alpine-based runtime** (minimal size)
+- **Stripped binary** with UPX compression
+- **Non-root user** for security
+- **Resource limits** (CPU: 1 core, Memory: 512MB)
+- **Auto-restart** on failure
+- **Multi-stage build** (only executable in final image)
+
+Check logs:
+```bash
+docker-compose -f docker-compose.prod.yml logs -f app
+```
+
+Stop:
+```bash
+docker-compose -f docker-compose.prod.yml down
+```
+
+**Image Size Comparison:**
+- Development build (~200-400MB with debian:bookworm-slim)
+- Production build (~50-100MB with Alpine + stripped binary + UPX)
+
 ## API Endpoints
 
-### 1. ACQUIRE /
+### 1. HELP /
+
+**HTTP Method:** `HELP` (custom method)
+**Content-Type:** `text/markdown`
+
+Returns the contents of this README.md file.
+
+**Example:**
+```bash
+curl -X HELP http://localhost:3000/
+```
+
+### 2. ACQUIRE /
 
 **HTTP Method:** `ACQUIRE` (custom method)
 **Content-Type:** `application/dhall`
@@ -41,9 +95,9 @@ This will:
 
 The UUID is persisted in the database along with the appId and securely base64-encoded payload.
 
-### 2. VALIDATE /{uuid}
+### 3. VALIDATE /{uuid}
 
-**HTTP Method:** `VALIDATE`
+**HTTP Method:** `VALIDATE` (custom method)
 **Content-Type:** `application/dhall`
 
 **Request Example (with payload validation):**
@@ -63,7 +117,7 @@ The UUID is persisted in the database along with the appId and securely base64-e
 - `204`: Success - UUID exists with matching appId (and payload if provided)
 - `417`: Failure - validation failed
 
-### 3. ABDICATE /{uuid}
+### 4. ABDICATE /{uuid}
 
 **HTTP Method:** `ABDICATE` (custom method)
 **Content-Type:** `application/dhall`
@@ -81,6 +135,45 @@ Note: The field `iPromiseAppIdMY_APP_IDisMine` must match the pattern `iPromiseA
 - `204`: Success - entry deleted
 - `403`: Promise field is false or missing/invalid
 - `404`: Entry not found
+
+### 5. RFC2324 Support (HTCPCP/1.0)
+
+This API implements **RFC2324** - Hyper Text Coffee Pot Control Protocol.
+
+**Any coffee-related request returns HTTP 418 "I'm a teapot"**
+
+Triggers:
+- HTTP method `BREW` or `WHEN`
+- Header `Accept-Additions: Coffee`
+- Header `Content-Type` containing "coffee"
+
+**Response:**
+- Status: `418 I'm a teapot`
+- Body: Random ASCII art teapot (4 variations)
+
+**Examples:**
+```bash
+# Using BREW method
+curl -X BREW http://localhost:3000/
+
+# Using Accept-Additions header
+curl -H "Accept-Additions: Coffee" http://localhost:3000/
+
+# Using Content-Type
+curl -H "Content-Type: message/coffeepot" http://localhost:3000/
+```
+
+Sample response:
+```
+        ___
+       {___}
+     .-'   '-.
+    /  Tea    \
+   |   Only!   |
+    \  .....  /
+     '-._._.-'
+       |_|_|
+```
 
 ## Database Schema
 
@@ -120,9 +213,62 @@ export JPG_QUALITY=10
 cabal run super-id
 ```
 
+## Running Tests
+
+Super-ID includes comprehensive API tests using **hspec** and **hspec-wai**.
+
+### Prerequisites for Testing
+
+Ensure PostgreSQL is running (you can use docker-compose):
+```bash
+docker-compose up -d postgres
+```
+
+### Run Tests Locally
+
+Using the test runner script:
+```bash
+./run-tests.sh
+```
+
+Or directly with cabal:
+```bash
+# Set environment variables
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_USER=superid
+export POSTGRES_PASSWORD=superid123
+export POSTGRES_DB=superid
+
+# Run tests
+cabal test --test-show-details=direct
+```
+
+### CI/CD Integration
+
+A GitHub Actions workflow is provided in `.github/workflows/test.yml`. It will:
+1. Set up PostgreSQL service
+2. Install Haskell and system dependencies
+3. Build the project
+4. Run all tests
+
+The tests cover:
+- ✓ HELP endpoint (returns README.md)
+- ✓ ACQUIRE endpoint (all formats: PNG, JPG, GIF, WAV)
+- ✓ VALIDATE endpoint (with and without payload)
+- ✓ ABDICATE endpoint (including promise validation)
+- ✓ RFC2324 compliance (BREW, WHEN methods, coffee headers)
+- ✓ Health check endpoint
+- ✓ Integration workflows
+
 ## Testing with curl
 
 **Note:** Replace `YOUR-UUID-HERE` with the actual UUID returned from ACQUIRE requests.
+
+Example HELP request:
+```bash
+curl -X HELP http://localhost:3000/
+```
 
 Example ACQUIRE request (PNG):
 ```bash
@@ -175,6 +321,18 @@ curl -X ABDICATE \
   http://localhost:3000/YOUR-UUID-HERE -v
 ```
 
+Example RFC2324 coffee requests (returns 418):
+```bash
+# Try to brew coffee
+curl -X BREW http://localhost:3000/ -v
+
+# Request with coffee header
+curl -H "Accept-Additions: Coffee" http://localhost:3000/ -v
+
+# Coffee content type
+curl -H "Content-Type: message/coffeepot" http://localhost:3000/ -v
+```
+
 ## Project Structure
 
 ```
@@ -187,20 +345,31 @@ super-id/
 │   ├── DhallTypes.hs        # Dhall parsing
 │   ├── ImageGen.hs          # PNG/JPG/GIF generation
 │   └── AudioGen.hs          # WAV audio generation
+├── test/
+│   ├── Spec.hs              # Test discovery
+│   └── ApiSpec.hs           # API endpoint tests
 ├── db/
 │   └── init.sql             # Database schema
+├── .github/
+│   └── workflows/
+│       └── test.yml         # CI/CD pipeline
 ├── Dockerfile               # Multi-stage Haskell build
+├── Dockerfile.prod          # Production optimized build
 ├── docker-compose.yml       # Docker orchestration
+├── docker-compose.prod.yml  # Production compose
+├── run-tests.sh             # Test runner script
 ├── .env                     # Environment variables
 └── super-id.cabal           # Haskell dependencies
 ```
 
 ## Technologies
 
-- **Language:** Haskell
-- **Web Framework:** Scotty
+- **Language:** Haskell (GHC 9.12.2)
+- **Web Framework:** Scotty (WAI/Warp)
 - **Database:** PostgreSQL (via postgresql-simple)
 - **Config Format:** Dhall
 - **Image Generation:** JuicyPixels
 - **Audio Generation:** espeak-ng
+- **Testing:** hspec, hspec-wai
+- **CI/CD:** GitHub Actions
 - **Containerization:** Docker, Docker Compose

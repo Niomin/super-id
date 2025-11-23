@@ -1,0 +1,78 @@
+name: Tests
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:alpine
+        env:
+          POSTGRES_USER: superid
+          POSTGRES_PASSWORD: superid123
+          POSTGRES_DB: superid
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Haskell
+      uses: haskell/actions/setup@v2
+      with:
+        ghc-version: '9.12.2'
+        cabal-version: 'latest'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpq-dev espeak-ng
+
+    - name: Cache cabal dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cabal/packages
+          ~/.cabal/store
+          dist-newstyle
+        key: ${{ runner.os }}-cabal-${{ hashFiles('**/*.cabal', 'cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-cabal-
+
+    - name: Update cabal package list
+      run: cabal update
+
+    - name: Install dependencies
+      run: cabal build --only-dependencies --enable-tests
+
+    - name: Build project
+      run: cabal build
+
+    - name: Initialize test database
+      run: |
+        PGPASSWORD=superid123 psql -h localhost -U superid -d superid -f db/init.sql
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: superid
+        POSTGRES_PASSWORD: superid123
+        POSTGRES_DB: superid
+
+    - name: Run tests
+      run: cabal test --test-show-details=direct
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: 5432
+        POSTGRES_USER: superid
+        POSTGRES_PASSWORD: superid123
+        POSTGRES_DB: superid
+        IMAGE_SIZE: 24
+        JPG_QUALITY: 1

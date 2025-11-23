@@ -14,6 +14,7 @@ executable super-id
                      , ImageGen
                      , AudioGen
                      , Logic
+                     , App
   hs-source-dirs:      app, src
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings
@@ -28,6 +29,7 @@ executable super-id
                      , text
                      , http-types
                      , wai
+                     , warp
                      , aeson
                      , mtl
                      , transformers
@@ -40,3 +42,45 @@ executable super-id
                      , random
                      , unordered-containers
                      , temporary
+
+test-suite super-id-test
+  type:                exitcode-stdio-1.0
+  main-is:             Spec.hs
+  other-modules:       ApiSpec
+                     , App
+                     , AudioGen
+                     , DhallTypes
+                     , ImageGen
+                     , Logic
+                     , Repository
+  hs-source-dirs:      test, app, src
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings
+  build-depends:       base >=4.14 && <5
+                     , scotty
+                     , dhall
+                     , postgresql-simple
+                     , JuicyPixels
+                     , uuid
+                     , base64-bytestring
+                     , bytestring
+                     , text
+                     , http-types
+                     , wai
+                     , warp
+                     , aeson
+                     , mtl
+                     , transformers
+                     , containers
+                     , vector
+                     , process
+                     , directory
+                     , filepath
+                     , time
+                     , random
+                     , unordered-containers
+                     , temporary
+                     , hspec
+                     , hspec-wai
+                     , hspec-wai-json
+                     , wai-extra
