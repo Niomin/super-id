@@ -14,20 +14,21 @@ import qualified Data.ByteString.Lazy as BL
 import Data.UUID (UUID)
 import qualified Data.UUID as UUID
 import Database.PostgreSQL.Simple (Connection)
+import Data.Pool (Pool)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Exception as E
 import System.Random (randomRIO)
 import qualified Data.ByteString as BS
 
-import Repository
 import DhallTypes
 import Logic
+import EventStore
 
 -- Create the WAI application (for testing and production)
-mkApp :: Connection -> Int -> Int -> IO Application
-mkApp conn imageSize jpgQuality = scottyApp $ do
+mkApp :: Pool Connection -> EventStoreConfig -> Int -> Int -> IO Application
+mkApp pool eventStore imageSize jpgQuality = scottyApp $ do
   -- Middleware to handle custom HTTP methods and RFC2324
-  middleware $ customMethodMiddleware conn imageSize jpgQuality
+  middleware $ customMethodMiddleware pool eventStore imageSize jpgQuality
 
   -- Health check endpoint
   get "/health" $ do
@@ -98,25 +99,25 @@ isCoffeeRequest req =
      (fmap (BS.isInfixOf "coffee") contentType == Just True)
 
 -- Middleware to handle custom HTTP methods (ACQUIRE, VALIDATE, ABDICATE, HELP) and RFC2324
-customMethodMiddleware :: Connection -> Int -> Int -> Middleware
-customMethodMiddleware conn imageSize jpgQuality app req respond = do
+customMethodMiddleware :: Pool Connection -> EventStoreConfig -> Int -> Int -> Middleware
+customMethodMiddleware pool eventStore imageSize jpgQuality app req respond = do
   let method = requestMethod req
       path = rawPathInfo req
 
   -- Handle all custom methods explicitly
   case () of
     _ | method == "HELP" -> handleHelp req respond
-      | method == "ACQUIRE" -> handleAcquire conn imageSize jpgQuality req respond
+      | method == "ACQUIRE" -> handleAcquire pool eventStore imageSize jpgQuality req respond
       | method == "BREW" -> handleTeapot req respond
       | method == "WHEN" -> handleTeapot req respond
-      | method == "VALIDATE" && "/" `BS.isPrefixOf` path -> handleValidate conn req respond
-      | method == "ABDICATE" && "/" `BS.isPrefixOf` path -> handleAbdicate conn req respond
+      | method == "VALIDATE" && "/" `BS.isPrefixOf` path -> handleValidate pool eventStore req respond
+      | method == "ABDICATE" && "/" `BS.isPrefixOf` path -> handleAbdicate pool eventStore req respond
       | isCoffeeRequest req -> handleTeapot req respond
       | otherwise -> app req respond
 
 -- ACQUIRE handler
-handleAcquire :: Connection -> Int -> Int -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
-handleAcquire conn imageSize jpgQuality req respond = do
+handleAcquire :: Pool Connection -> EventStoreConfig -> Int -> Int -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+handleAcquire pool eventStore imageSize jpgQuality req respond = do
   result <- (do
     -- Read request body
     bodyBytes <- strictRequestBody req
@@ -142,7 +143,7 @@ handleAcquire conn imageSize jpgQuality req respond = do
                   _ -> FormatPNG  -- Default
 
             -- Call business logic
-            (uuid, responseBytes, respContentType) <- acquireIdentity conn acquireReq format imageSize jpgQuality
+            (uuid, responseBytes, respContentType) <- acquireIdentity pool eventStore acquireReq format imageSize jpgQuality
             return $ Right (responseBytes, respContentType)
       _ -> return $ Left "Invalid content type. Expected application/dhall"
     ) `E.catch` \(e :: E.SomeException) -> return $ Left (show e)
@@ -152,15 +153,16 @@ handleAcquire conn imageSize jpgQuality req respond = do
     Right (bytes, contentType) -> respond $ responseLBS status200 [("Content-Type", TE.encodeUtf8 contentType)] bytes
 
 -- VALIDATE handler
-handleValidate :: Connection -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
-handleValidate conn req respond = do
+handleValidate :: Pool Connection -> EventStoreConfig -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+handleValidate pool eventStore req respond = do
   result <- (do
     -- Extract UUID from path
     let path = TE.decodeUtf8 $ rawPathInfo req
         uuidStr = T.drop 1 path  -- Remove leading "/"
 
     case UUID.fromString (T.unpack uuidStr) of
-      Nothing -> return $ Left "Invalid UUID format"
+      Nothing -> do
+        return $ Left "Invalid UUID format"
       Just uuid -> do
         -- Read request body
         bodyBytes <- strictRequestBody req
@@ -169,18 +171,22 @@ handleValidate conn req respond = do
         -- Parse Dhall request
         parseResult <- parseDhallValidateRequest bodyText
         case parseResult of
-          Left err -> return $ Left ("Dhall parse error: " ++ err)
+          Left err -> do
+            return $ Left ("Dhall parse error: " ++ err)
           Right validateReq -> do
             -- Call business logic
-            isValid <- validateIdentityLogic conn uuid validateReq
+            isValid <- validateIdentityLogic pool eventStore uuid validateReq
             if isValid
               then return $ Right ()
               else return $ Left "Validation failed"
-    ) `E.catch` \(e :: E.SomeException) -> return $ Left (show e)
+    ) `E.catch` \(e :: E.SomeException) -> do
+      return $ Left (show e)
 
   case result of
-    Left _ -> respond $ responseLBS status417 [] ""
-    Right () -> respond $ responseLBS status204 [] ""
+    Left err -> do
+      respond $ responseLBS status417 [] ""
+    Right () -> do
+      respond $ responseLBS status204 [] ""
 
 -- HELP handler - returns README.md
 handleHelp :: Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
@@ -201,8 +207,8 @@ handleTeapot req respond = do
     (BL.fromStrict $ TE.encodeUtf8 $ T.pack teapot)
 
 -- ABDICATE handler
-handleAbdicate :: Connection -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
-handleAbdicate conn req respond = do
+handleAbdicate :: Pool Connection -> EventStoreConfig -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+handleAbdicate pool eventStore req respond = do
   result <- (do
     -- Extract UUID from path
     let path = TE.decodeUtf8 $ rawPathInfo req
@@ -221,7 +227,7 @@ handleAbdicate conn req respond = do
           Left err -> return $ Left (400, "Dhall parse error: " ++ err)
           Right abdicateReq -> do
             -- Call business logic
-            deleteResult <- abdicateIdentity conn uuid abdicateReq
+            deleteResult <- abdicateIdentity pool eventStore uuid abdicateReq
             case deleteResult of
               Left "Promise field is false or missing" -> return $ Left (403, "Promise field is false or missing")
               Left "Not found" -> return $ Left (404, "Not found")
@@ -229,5 +235,5 @@ handleAbdicate conn req respond = do
     ) `E.catch` \(e :: E.SomeException) -> return $ Left (500, show e)
 
   case result of
-    Left (code, msg) -> respond $ responseLBS (mkStatus code "") [] ""
+    Left (code, msg) -> respond $ responseLBS (mkStatus code "") [("Content-Type", "text/plain")] (BL.fromStrict $ TE.encodeUtf8 $ T.pack msg)
     Right () -> respond $ responseLBS status204 [] ""

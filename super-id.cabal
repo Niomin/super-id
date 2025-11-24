@@ -9,12 +9,14 @@ build-type:          Simple
 
 executable super-id
   main-is:             Main.hs
-  other-modules:       Repository
-                     , DhallTypes
+  other-modules:       DhallTypes
                      , ImageGen
                      , AudioGen
                      , Logic
                      , App
+                     , Events
+                     , EventStore
+                     , Projection
   hs-source-dirs:      app, src
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings
@@ -42,6 +44,7 @@ executable super-id
                      , random
                      , unordered-containers
                      , temporary
+                     , resource-pool
 
 test-suite super-id-test
   type:                exitcode-stdio-1.0
@@ -52,7 +55,9 @@ test-suite super-id-test
                      , DhallTypes
                      , ImageGen
                      , Logic
-                     , Repository
+                     , Events
+                     , EventStore
+                     , Projection
   hs-source-dirs:      test, app, src
   default-language:    Haskell2010
   default-extensions:  OverloadedStrings
@@ -84,3 +89,4 @@ test-suite super-id-test
                      , hspec-wai
                      , hspec-wai-json
                      , wai-extra
+                     , resource-pool

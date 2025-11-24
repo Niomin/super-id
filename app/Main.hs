@@ -4,16 +4,25 @@ module Main (main) where
 
 import Network.Wai.Handler.Warp (run)
 import System.Environment (lookupEnv)
+import System.IO (hSetBuffering, stdout, stderr, BufferMode(LineBuffering))
 import Text.Read (readMaybe)
 
-import Repository
 import App
+import EventStore
 
 main :: IO ()
 main = do
-  -- Initialize database connection
-  conn <- initDB
-  putStrLn "Database connection established"
+  -- Set unbuffered output for logging
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
+
+  -- Initialize connection pool for event store
+  connPool <- initConnectionPool
+  putStrLn "Connection pool created"
+
+  -- Initialize event store
+  eventStore <- initEventStore connPool
+  putStrLn "Event store initialized (YOLO mode activated)"
 
   -- Read IMAGE_SIZE from environment (default: 24)
   imageSizeStr <- lookupEnv "IMAGE_SIZE"
@@ -27,5 +36,5 @@ main = do
 
   -- Start Scotty server with custom method middleware
   putStrLn "Server starting on port 3000..."
-  app <- mkApp conn imageSize jpgQuality
+  app <- mkApp connPool eventStore imageSize jpgQuality
   run 3000 app
