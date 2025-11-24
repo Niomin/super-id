@@ -103,15 +103,16 @@ customMethodMiddleware conn imageSize jpgQuality app req respond = do
   let method = requestMethod req
       path = rawPathInfo req
 
-  -- RFC2324: Check for coffee requests first
-  if isCoffeeRequest req
-    then handleTeapot req respond
-    else case (method, path) of
-      ("HELP", "/") -> handleHelp req respond
-      ("ACQUIRE", "/") -> handleAcquire conn imageSize jpgQuality req respond
-      ("VALIDATE", _) | "/" `BL.isPrefixOf` BL.fromStrict path -> handleValidate conn req respond
-      ("ABDICATE", _) | "/" `BL.isPrefixOf` BL.fromStrict path -> handleAbdicate conn req respond
-      _ -> app req respond
+  -- Handle all custom methods explicitly
+  case () of
+    _ | method == "HELP" -> handleHelp req respond
+      | method == "ACQUIRE" -> handleAcquire conn imageSize jpgQuality req respond
+      | method == "BREW" -> handleTeapot req respond
+      | method == "WHEN" -> handleTeapot req respond
+      | method == "VALIDATE" && "/" `BS.isPrefixOf` path -> handleValidate conn req respond
+      | method == "ABDICATE" && "/" `BS.isPrefixOf` path -> handleAbdicate conn req respond
+      | isCoffeeRequest req -> handleTeapot req respond
+      | otherwise -> app req respond
 
 -- ACQUIRE handler
 handleAcquire :: Connection -> Int -> Int -> Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived

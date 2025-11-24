@@ -34,7 +34,7 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libpq-dev espeak-ng
+        sudo apt-get install -y libpq-dev espeak-ng postgresql-client
 
     - name: Cache cabal dependencies
       uses: actions/cache@v3
