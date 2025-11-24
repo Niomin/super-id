@@ -1,0 +1,53 @@
+# Build stage
+FROM --platform=linux/arm64 haskell:9.12.2 AS builder
+
+WORKDIR /app
+
+# Install PostgreSQL development libraries
+RUN apt-get update && \
+    apt-get install -y libpq-dev upx && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy cabal file and download dependencies
+COPY super-id.cabal ./
+RUN cabal update && cabal build --only-dependencies
+
+# Copy source code
+COPY . .
+
+# Build the application with optimization
+RUN cabal build --enable-optimization=2 --enable-executable-stripping
+
+# Install to known location and strip the binary
+RUN cabal install --install-method=copy --installdir=/app --enable-executable-stripping && \
+    strip --strip-all /app/super-id && \
+    upx --best --lzma /app/super-id || true
+
+# Runtime stage - using Alpine for minimal size
+FROM --platform=linux/arm64 alpine:3.19
+
+# Install only runtime dependencies in a single layer
+RUN apk add --no-cache \
+    libpq \
+    gmp \
+    espeak-ng \
+    ca-certificates && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy only the executable from builder
+COPY --from=builder /app/super-id .
+
+# Copy README.md for HELP endpoint
+COPY README.md .
+
+# Create non-root user for security
+RUN adduser -D -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 3000
+
+CMD ["./super-id"]

@@ -39,6 +39,9 @@ WORKDIR /app
 # Copy the executable from builder
 COPY --from=builder /app/super-id .
 
+# Copy README.md for HELP endpoint
+COPY README.md .
+
 # Expose port
 EXPOSE 3000
 
