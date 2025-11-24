@@ -10,7 +10,7 @@ import qualified Data.ByteString.Lazy as BL
 import System.Environment (setEnv)
 
 import App (mkApp)
-import Repository (initDB)
+import EventStore (initConnectionPool, initEventStore)
 
 testImageSize :: Int
 testImageSize = 24
@@ -26,8 +26,11 @@ testApp = do
   setEnv "POSTGRES_USER" "superid"
   setEnv "POSTGRES_PASSWORD" "superid123"
   setEnv "POSTGRES_DB" "superid"
-  conn <- initDB
-  mkApp conn testImageSize testJpgQuality
+
+  connPool <- initConnectionPool
+  eventStore <- initEventStore connPool
+
+  mkApp connPool eventStore testImageSize testJpgQuality
 
 spec :: Spec
 spec = with testApp $ do

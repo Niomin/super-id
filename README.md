@@ -7,6 +7,7 @@ A distributed identity management system with custom HTTP methods, Dhall-based c
 - Dhall-powered API with strong type safety
 - Multiple response formats: PNG, JPEG, GIF, WAV
 - RFC2324/HTCPCP compliant (Hyper Text Coffee Pot Control Protocol)
+- Event Sourcing with full audit trail and time travel capabilities
 - Production-ready Docker setup with minimal image size
 - PostgreSQL backend with optimized indexing
 
@@ -14,6 +15,19 @@ A distributed identity management system with custom HTTP methods, Dhall-based c
 
 - Docker and Docker Compose
 - For local development without Docker: Haskell (GHC 9.12.2), Cabal, PostgreSQL
+
+## Event Sourcing
+
+**NEW!** Super-ID now supports event sourcing for complete audit trails and CQRS architecture.
+
+See **[EVENTSOURCING.md](EVENTSOURCING.md)** for detailed setup and usage instructions.
+
+Key features:
+- Immutable event log of all state changes
+- Event replay and time travel capabilities
+- Optimized read models (projections)
+- Snapshot support for performance
+- PostgreSQL-backed event store
 
 ## Running with Docker Compose
 
@@ -190,6 +204,7 @@ CREATE TABLE identities (
 
 - `IMAGE_SIZE`: Height/width of generated images in pixels (default: 24). Must be divisible by 12 for best results.
 - `JPG_QUALITY`: JPEG compression quality from 1 (lowest, highest compression) to 100 (highest quality, lowest compression). Default: 1.
+- `SNAPSHOT_FREQUENCY`: Take aggregate snapshot every N events (default: 50).
 
 ## Local Development
 
@@ -344,12 +359,14 @@ super-id/
 │   ├── Logic.hs             # Business logic
 │   ├── DhallTypes.hs        # Dhall parsing
 │   ├── ImageGen.hs          # PNG/JPG/GIF generation
-│   └── AudioGen.hs          # WAV audio generation
+│   ├── AudioGen.hs          # WAV audio generation
+│   ├── Events.hs            # Domain events and aggregates
+│   └── EventStore.hs        # Event sourcing infrastructure
 ├── test/
 │   ├── Spec.hs              # Test discovery
 │   └── ApiSpec.hs           # API endpoint tests
 ├── db/
-│   └── init.sql             # Database schema
+│   └── init.sql             # Database schema (with event tables)
 ├── .github/
 │   └── workflows/
 │       └── test.yml         # CI/CD pipeline
@@ -359,6 +376,7 @@ super-id/
 ├── docker-compose.prod.yml  # Production compose
 ├── run-tests.sh             # Test runner script
 ├── .env                     # Environment variables
+├── EVENTSOURCING.md         # Event sourcing documentation
 └── super-id.cabal           # Haskell dependencies
 ```
 
@@ -367,6 +385,7 @@ super-id/
 - **Language:** Haskell (GHC 9.12.2)
 - **Web Framework:** Scotty (WAI/Warp)
 - **Database:** PostgreSQL (via postgresql-simple)
+- **Event Sourcing:** Custom implementation with PostgreSQL JSONB storage
 - **Config Format:** Dhall
 - **Image Generation:** JuicyPixels
 - **Audio Generation:** espeak-ng

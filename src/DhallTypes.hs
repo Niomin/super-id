@@ -17,7 +17,8 @@ module DhallTypes
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Base64 as B64
-import Dhall (Generic, FromDhall, input, auto)
+import Dhall (Generic, FromDhall, input, auto, InterpretOptions(..), defaultInterpretOptions, Decoder)
+import qualified Dhall
 import GHC.Generics (Generic)
 import Control.Exception (try, SomeException)
 
@@ -66,13 +67,15 @@ parseDhallAbdicateRequest dhallText = do
     if T.null (snd appIdMatch)
       then return $ Left "appId field not found"
       else do
-        let afterAppId = T.drop 10 (snd appIdMatch)  -- skip 'appId = "'
+        let afterAppId = T.drop 9 (snd appIdMatch)  -- skip 'appId = "'
             appIdVal = T.takeWhile (/= '\"') afterAppId
             promiseFieldName = "iPromiseAppId" <> appIdVal <> "IsMine"
-            hasPromiseTrue = (promiseFieldName <> " = true") `T.isInfixOf` dhallText ||
-                           (promiseFieldName <> " = True") `T.isInfixOf` dhallText
-            hasPromiseFalse = (promiseFieldName <> " = false") `T.isInfixOf` dhallText ||
-                            (promiseFieldName <> " = False") `T.isInfixOf` dhallText
+            normalizedText = T.filter (/= ' ') dhallText
+            normalizedPromisePattern = T.filter (/= ' ') promiseFieldName
+            hasPromiseTrue = (normalizedPromisePattern <> "=true") `T.isInfixOf` normalizedText ||
+                           (normalizedPromisePattern <> "=True") `T.isInfixOf` normalizedText
+            hasPromiseFalse = (normalizedPromisePattern <> "=false") `T.isInfixOf` normalizedText ||
+                            (normalizedPromisePattern <> "=False") `T.isInfixOf` normalizedText
         if hasPromiseTrue
           then return $ Right $ AbdicateRequest appIdVal True
           else if hasPromiseFalse
